@@ -1,0 +1,8 @@
+19-4-034	EXTRA	C1 2019 February 23 16_36_25 02-Frame-1.tif
+19-4-039	MISSING C4 2019 February 24 15_26_17 21-Frame-1.tif
+19-4-039	MISSING	C4 2019 February 24 15_26_17 21-Frame-2.tif
+19-4-035	EXTRA	C1 -- Hard to tell as time stamps aren't global, but are most likely from the beginning
+19-4-035	EXTRA	C1 -- Hard to tell as time stamps aren't global, but are most likely from the beginning
+19-4-029	MISSING C1 2019 February 22 18_36_52 12-Frame-2.tif
+19-4-025	MISSING	C1 -- Hard to tell as time stamps aren't global, but are most likely from the beginning
+19-4-025	MISSING	C1 -- Hard to tell as time stamps aren't global, but are most likely from the beginning
