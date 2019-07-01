@@ -356,14 +356,15 @@ class shot:
 
 		elif (self.shot_num == '19-4-036') or (self.shot_num == '19-4-028') or self.unreliable_registration:
 			if self.shot_num == '19-4-027' or self.shot_num == '19-4-039':
-				regis_1 = self.__alignImages_ECC(im1,im1,number_of_iterations=5000)
-				regis_2 = self.__alignImages_ECC(im1,im2,number_of_iterations=5000)
-				regis_3 = self.__alignImages_ECC(im1,im3,number_of_iterations=5000)
-				regis_4 = self.__alignImages_ECC(im1,im4,number_of_iterations=5000)
-			regis_1 = self.__alignImages_ECC(im1,im1)
-			regis_2 = self.__alignImages_ECC(im1,im2)
-			regis_3 = self.__alignImages_ECC(im1,im3)
-			regis_4 = self.__alignImages_ECC(im1,im4)
+				regis_1 = self.__alignImages_ECC(im1,im1,model_type=cv2.MOTION_EUCLIDEAN,number_of_iterations=5000)
+				regis_2 = self.__alignImages_ECC(im1,im2,model_type=cv2.MOTION_EUCLIDEAN,number_of_iterations=5000)
+				regis_3 = self.__alignImages_ECC(im1,im3,model_type=cv2.MOTION_EUCLIDEAN,number_of_iterations=5000)
+				regis_4 = self.__alignImages_ECC(im1,im4,model_type=cv2.MOTION_EUCLIDEAN,number_of_iterations=5000)
+			else:
+				regis_1 = self.__alignImages_ECC(im1,im1)
+				regis_2 = self.__alignImages_ECC(im1,im2)
+				regis_3 = self.__alignImages_ECC(im1,im3)
+				regis_4 = self.__alignImages_ECC(im1,im4)
 
 		else:
 			regis_1 = self.__alignImages(im1,im1)
