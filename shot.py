@@ -4,6 +4,7 @@ import cPickle as pickle
 import re
 from itertools import izip_longest
 import cv2
+import sys
 
 class shot:
 
@@ -29,6 +30,7 @@ class shot:
 		self.cpumps = None
 		self.registration_matrices = None
 		self.unreliable_registration = False
+		self.first_median = 99999.
 		self.__read_chart(self.shot_num) # Populates each instance with information from worksheet + other hand-inputted stuff from the CSV file		
 
 	
@@ -49,6 +51,7 @@ class shot:
 		print 'self.bright, self.dark, self.ambient = ', self.bright, self.dark, self.ambient
 		print 'self.fsingle, self.cpumps = ', self.fsingle, self.cpumps
 		print 'self.registration_matrices.shape = ', self.registration_matrices.shape
+		print 'self.first_median = ', self.first_median
 		print 'self.unreliable_registration = ', self.unreliable_registration
 		return '\n'
 
@@ -167,20 +170,37 @@ class shot:
 
 	# Returns a series of normalized images of the impact using the bright and dark field images
 	def get_normalized_impact(self):
-		def normalize_helper(image, dark, bright):
-			im_min, im_max = np.amin(image), np.amax(image)
+
+		def normalize_helper(image, dark, bright, cam):
+			# normalize
 			new_difference = bright-dark
-			return np.multiply(image - im_min,new_difference/(im_max - im_min)) + dark
+			new_image = (image-dark)/(new_difference+.001)
+			# filter out extreme points
+			if cam == 1 and self.first_median == 99999.:
+				self.first_median = np.median(new_image)
+
+			std = new_image.std()
+			lower_bound, upper_bound = self.first_median-5.0*std, self.first_median+5.0*std
+			new_image[new_image<lower_bound] = lower_bound
+			new_image[new_image>upper_bound] = upper_bound	
+			# Rescale each image to match the first [just a median shift]
+			cur_med = np.median(new_image)
+			if cur_med >= self.first_median:
+				new_image -= (cur_med-self.first_median)
+			else:
+				new_image += (self.first_median-cur_med)
+			
+			return new_image
 
 		impact_images_cam_1 = np.asarray(map(lambda x: plt.imread(x), self.get_impact(cam=1)))
 		impact_images_cam_2 = np.asarray(map(lambda x: plt.imread(x), self.get_impact(cam=2)))
 		impact_images_cam_3 = np.asarray(map(lambda x: plt.imread(x), self.get_impact(cam=3)))
 		impact_images_cam_4 = np.asarray(map(lambda x: plt.imread(x), self.get_impact(cam=4)))
 	
-		impact_images_cam_1 = np.asarray(map(lambda x: normalize_helper(x,self.get_dark_avg(camera=1),self.get_bright_avg(camera=1)), impact_images_cam_1))	
-		impact_images_cam_2 = np.asarray(map(lambda x: normalize_helper(x,self.get_dark_avg(camera=2),self.get_bright_avg(camera=2)), impact_images_cam_2))	
-		impact_images_cam_3 = np.asarray(map(lambda x: normalize_helper(x,self.get_dark_avg(camera=3),self.get_bright_avg(camera=3)), impact_images_cam_3))	
-		impact_images_cam_4 = np.asarray(map(lambda x: normalize_helper(x,self.get_dark_avg(camera=4),self.get_bright_avg(camera=4)), impact_images_cam_4))	
+		impact_images_cam_1 = np.asarray(map(lambda x: normalize_helper(x,self.get_dark_avg(camera=1),self.get_bright_avg(camera=1),cam=1), impact_images_cam_1))	
+		impact_images_cam_2 = np.asarray(map(lambda x: normalize_helper(x,self.get_dark_avg(camera=2),self.get_bright_avg(camera=2),cam=2), impact_images_cam_2))	
+		impact_images_cam_3 = np.asarray(map(lambda x: normalize_helper(x,self.get_dark_avg(camera=3),self.get_bright_avg(camera=3),cam=3), impact_images_cam_3))	
+		impact_images_cam_4 = np.asarray(map(lambda x: normalize_helper(x,self.get_dark_avg(camera=4),self.get_bright_avg(camera=4),cam=4), impact_images_cam_4))	
 		
 		normalized_impact = np.asarray([x for x in sum(izip_longest(impact_images_cam_1,impact_images_cam_2,impact_images_cam_3,impact_images_cam_4), ()) if x is not None])
 
@@ -192,9 +212,15 @@ class shot:
 	def get_normalized_ambient(self,cam=0):
 		assert (cam>=0) and (cam<=4)
 		def normalize_helper(image, dark, bright):
-			im_min, im_max = np.amin(image), np.amax(image)
+			# normalize
 			new_difference = bright-dark
-			return np.multiply(image - im_min,new_difference/(im_max - im_min)) + dark
+			new_image = (image-dark)/(new_difference+.001)
+			# remove all points that are skewing results
+			std, median = new_image.std(), np.median(new_image)
+			lower_bound, upper_bound = median- 0.15*std, median+0.15*std	
+			new_image[new_image<lower_bound] = lower_bound
+			new_image[new_image>upper_bound] = upper_bound	
+			return image #new_image
 
 		ambient_image_cam_1 = self.get_ambient_avg(camera=1)
 		ambient_image_cam_2 = self.get_ambient_avg(camera=2)
@@ -256,20 +282,21 @@ class shot:
 	# This serves as a helper method to the registration method below.
 	# Here, X = h*x. So the true deformation gradient is inverse of h
 	def __alignImages(self, im1, im2, MAX_FEATURES=1000, GOOD_MATCH_PERCENT=0.15):
- 
+
 		# Convert images to grayscale
 	  	im1Gray = im1 #cv2.cvtColor(im1, cv2.COLOR_BGR2GRAY)
 	  	im2Gray = im2 #cv2.cvtColor(im2, cv2.COLOR_BGR2GRAY)
-   
+  
+ 
 	 	# Detect ORB features and compute descriptors.
  		orb = cv2.ORB_create(MAX_FEATURES)
  		keypoints1, descriptors1 = orb.detectAndCompute(im1Gray, None)
  		keypoints2, descriptors2 = orb.detectAndCompute(im2Gray, None)
-   
+ 
 		# Match features.
 		matcher = cv2.DescriptorMatcher_create(cv2.DESCRIPTOR_MATCHER_BRUTEFORCE_HAMMING)
 		matches = matcher.match(descriptors1, descriptors2, None)
-  
+
 		# Sort matches by score
 		matches.sort(key=lambda x: x.distance, reverse=False)
 
@@ -288,11 +315,11 @@ class shot:
 		# Find homography
 		h, mask = cv2.findHomography(points1, points2, cv2.RANSAC)
  
-   
 		return h
 
 
 	def __alignImages_ECC(self,im1,im2,model_type=cv2.MOTION_AFFINE, number_of_iterations=100):
+
 		# Convert images to grayscale
 		im1_gray = im1 #cv2.cvtColor(im1,cv2.COLOR_BGR2GRAY)
 		im2_gray = im2 #cv2.cvtColor(im2,cv2.COLOR_BGR2GRAY)
@@ -340,13 +367,16 @@ class shot:
 		def normalize_helper(image):
                         im_min, im_max = np.amin(image), np.amax(image)
                         new_difference = 255
-                        return (image - im_min)*(new_difference/(im_max - im_min))
+			imnew = (image - im_min)*(new_difference/(im_max - im_min))
+			return imnew
 		
 
 		im1 = np.asarray(normalize_helper(self.get_normalized_ambient(cam=1)),dtype=np.uint8)	
 		im2 = np.asarray(normalize_helper(self.get_normalized_ambient(cam=2)),dtype=np.uint8)
 		im3 = np.asarray(normalize_helper(self.get_normalized_ambient(cam=3)),dtype=np.uint8)
 		im4 = np.asarray(normalize_helper(self.get_normalized_ambient(cam=4)),dtype=np.uint8)
+
+		
 		
 		if (self.shot_num == '19-4-025') or (self.shot_num == '19-4-032'):
 			regis_1 = self.__alignImages_ECC(im1,im1,model_type=cv2.MOTION_EUCLIDEAN)
@@ -367,11 +397,11 @@ class shot:
 				regis_4 = self.__alignImages_ECC(im1,im4)
 
 		else:
+		
 			regis_1 = self.__alignImages(im1,im1)
 			regis_2 = self.__alignImages(im2,im1)
 			regis_3 = self.__alignImages(im3,im1)
 			regis_4 = self.__alignImages(im4,im1)
-
 
 		regis = np.asarray([regis_1,regis_2,regis_3,regis_4] )
 		
