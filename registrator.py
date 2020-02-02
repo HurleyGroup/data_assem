@@ -52,10 +52,14 @@ with open(database,'rb') as fp:
 	shot_list = pickle.load(fp)
 shot_list = np.asarray(shot_list)
 
+
+
 for o in np.arange(len(shot_list)):
 	#Get shot from list and assemble the path where the registered deformation will be saved
 	shot = shot_list[o]
 	shot_path = registered_deformations_path + shot.shot_num+'/'
+
+	if shot.shot_num != '19-4-039': continue
 
 	# Create the new directory, or overwrite it if it exists. Handles race conditions.
 	if os.path.isdir(shot_path):
@@ -70,18 +74,36 @@ for o in np.arange(len(shot_list)):
 	deformation = shot.get_normalized_impact()
 	registration_info = shot.registration_matrices
 
+	print shot.shot_num,': ', deformation.shape, registration_info.shape
+
 	registered_deformation = []
+
 	for i in np.arange(len(deformation)):
-		
-		if shot.shot_num == '19-4-036' or shot.shot_num == '19-4-028' or shot.shot_num == '19-4-027' or \
-			 shot.shot_num == '19-4-032' or shot.shot_num == '19-4-025' or shot.unreliable_registration:
+		if (i%4) != 0:
+			if shot.shot_num == '19-4-025':
+				shot194026 = (shot_list[np.asarray([x.shot_num for x in shot_list]) == '19-4-026'])[0]
+				img = cv2.warpAffine(deformation[i], shot194026.registration_matrices[i%4], deformation[i].shape, flags=cv2.INTER_LINEAR + cv2.WARP_INVERSE_MAP)
 
-			img = cv2.warpAffine(deformation[i], registration_info[i%4], deformation[i].shape, flags=cv2.INTER_LINEAR + cv2.WARP_INVERSE_MAP)
 
+			elif shot.shot_num == '19-4-034' or shot.shot_num=='19-4-039':
+				shot194036 = (shot_list[np.asarray([x.shot_num for x in shot_list]) == '19-4-036'])[0]
+				img = cv2.warpAffine(deformation[i], shot194036.registration_matrices[i%4], deformation[i].shape, flags=cv2.INTER_LINEAR + cv2.WARP_INVERSE_MAP)
+
+
+			elif shot.shot_num == '19-4-039':
+				shot194038 = (shot_list[np.asarray([x.shot_num for x in shot_list]) == '19-4-040'])[0]
+				img = cv2.warpPerspective(deformation[i],shot194038.registration_matrices[i%4],deformation[i].shape)
+
+
+			elif shot.shot_num == '19-4-036' or shot.shot_num == '19-4-028' or shot.shot_num == '19-4-027' or \
+				 shot.shot_num == '19-4-032' or shot.unreliable_registration:
+				img = cv2.warpAffine(deformation[i], registration_info[i%4], deformation[i].shape, flags=cv2.INTER_LINEAR + cv2.WARP_INVERSE_MAP)
+			else:
+				img = cv2.warpPerspective(deformation[i],registration_info[i%4],deformation[i].shape)
+	
 		else:
-	
-			img = cv2.warpPerspective(deformation[i],registration_info[i%4],deformation[i].shape)
-	
+			img = deformation[i]
+
 		registered_deformation.append(img)
 
 
