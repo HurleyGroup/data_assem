@@ -2,7 +2,7 @@ import numpy as np
 from matplotlib import pyplot as plt
 import cPickle as pickle
 import re
-from itertools import izip_longest
+from itertools import izip_longest as izip_longest
 import cv2
 import sys
 
@@ -35,24 +35,24 @@ class shot:
 
 	
 	def __repr__(self):
-		print '\nShot ', self.shot_num, ': \n'
-		print 'self.proj_mass = ', self.proj_mass
-		print 'self.powder_load = ', self.powder_load
-		print 'self.primer_load = ', self.primer_load
-		print 'self.proj_diam = ', self.proj_diam
-		print 'self.chamb_vac = ', self.chamb_vac
-		print 'self.breech_pres = ', self.breech_pres
-		print 'self.velocity = ', self.velocity
-		print 'self.sample_num = ', self.sample_num
-		print 'self.xpci.shape = ', self.xpci.shape
-		print 'self.ct.shape = ', self.ct.shape
-		print 'self.X2, self.Y = ', self.X2, self.Y
-		print 'self.gap = ', self.gap
-		print 'self.bright, self.dark, self.ambient = ', self.bright, self.dark, self.ambient
-		print 'self.fsingle, self.cpumps = ', self.fsingle, self.cpumps
-		print 'self.registration_matrices.shape = ', self.registration_matrices.shape
-		print 'self.first_median = ', self.first_median
-		print 'self.unreliable_registration = ', self.unreliable_registration
+		print( '\nShot ', self.shot_num, ': \n')
+		print( 'self.proj_mass = ', self.proj_mass)
+		print( 'self.powder_load = ', self.powder_load)
+		print( 'self.primer_load = ', self.primer_load)
+		print( 'self.proj_diam = ', self.proj_diam)
+		print( 'self.chamb_vac = ', self.chamb_vac)
+		print( 'self.breech_pres = ', self.breech_pres)
+		print( 'self.velocity = ', self.velocity)
+		print( 'self.sample_num = ', self.sample_num)
+		print( 'self.xpci.shape = ', self.xpci.shape)
+		print( 'self.ct.shape = ', self.ct.shape)
+		print( 'self.X2, self.Y = ', self.X2, self.Y)
+		print( 'self.gap = ', self.gap)
+		print( 'self.bright, self.dark, self.ambient = ', self.bright, self.dark, self.ambient)
+		print( 'self.fsingle, self.cpumps = ', self.fsingle, self.cpumps)
+		print( 'self.registration_matrices.shape = ', self.registration_matrices.shape)
+		print( 'self.first_median = ', self.first_median)
+		print( 'self.unreliable_registration = ', self.unreliable_registration)
 		return '\n'
 
 
@@ -211,6 +211,30 @@ class shot:
 	# Returns the normalized image of the relevant camera, if camera is specified
 	def get_normalized_ambient(self,cam=0):
 		assert (cam>=0) and (cam<=4)
+
+
+		def normalize_helper(image, dark, bright, cam):
+			# normalize
+			new_difference = bright-dark
+			new_image = (image-dark)/(new_difference+.001)
+			# filter out extreme points
+			if cam == 1 and self.first_median == 99999.:
+				self.first_median = np.median(new_image)
+
+			std = new_image.std()
+			lower_bound, upper_bound = self.first_median-5.0*std, self.first_median+5.0*std
+			new_image[new_image<lower_bound] = lower_bound
+			new_image[new_image>upper_bound] = upper_bound	
+			# Rescale each image to match the first [just a median shift]
+			cur_med = np.median(new_image)
+			if cur_med >= self.first_median:
+				new_image -= (cur_med-self.first_median)
+			else:
+				new_image += (self.first_median-cur_med)
+			
+			return new_image
+
+		"""
 		def normalize_helper(image, dark, bright):
 			# normalize
 			new_difference = bright-dark
@@ -221,16 +245,17 @@ class shot:
 			new_image[new_image<lower_bound] = lower_bound
 			new_image[new_image>upper_bound] = upper_bound	
 			return image #new_image
+		"""
 
 		ambient_image_cam_1 = self.get_ambient_avg(camera=1)
 		ambient_image_cam_2 = self.get_ambient_avg(camera=2)
 		ambient_image_cam_3 = self.get_ambient_avg(camera=3)
 		ambient_image_cam_4 = self.get_ambient_avg(camera=4)
 	
-		ambient_image_cam_1 = normalize_helper(ambient_image_cam_1,self.get_dark_avg(camera=1),self.get_bright_avg(camera=1))	
-		ambient_image_cam_2 = normalize_helper(ambient_image_cam_2,self.get_dark_avg(camera=2),self.get_bright_avg(camera=2))	
-		ambient_image_cam_3 = normalize_helper(ambient_image_cam_3,self.get_dark_avg(camera=3),self.get_bright_avg(camera=3))	
-		ambient_image_cam_4 = normalize_helper(ambient_image_cam_4,self.get_dark_avg(camera=4),self.get_bright_avg(camera=4))	
+		ambient_image_cam_1 = normalize_helper(ambient_image_cam_1,self.get_dark_avg(camera=1),self.get_bright_avg(camera=1),1)	
+		ambient_image_cam_2 = normalize_helper(ambient_image_cam_2,self.get_dark_avg(camera=2),self.get_bright_avg(camera=2),2)	
+		ambient_image_cam_3 = normalize_helper(ambient_image_cam_3,self.get_dark_avg(camera=3),self.get_bright_avg(camera=3),3)	
+		ambient_image_cam_4 = normalize_helper(ambient_image_cam_4,self.get_dark_avg(camera=4),self.get_bright_avg(camera=4),4)	
 		
 		normalized_ambient = np.asarray([ambient_image_cam_1, ambient_image_cam_2, ambient_image_cam_3, ambient_image_cam_4])
 
@@ -284,14 +309,14 @@ class shot:
 	def __alignImages(self, im1, im2, MAX_FEATURES=1000, GOOD_MATCH_PERCENT=0.15):
 
 		# Convert images to grayscale
-	  	im1Gray = im1 #cv2.cvtColor(im1, cv2.COLOR_BGR2GRAY)
-	  	im2Gray = im2 #cv2.cvtColor(im2, cv2.COLOR_BGR2GRAY)
+		im1Gray = im1 #cv2.cvtColor(im1, cv2.COLOR_BGR2GRAY)im2Gray = im2 #cv2.cvtColor(im2, cv2.COLOR_BGR2GRAY)
+		im2Gray = im2 #cv2.cvtColor(im2, cv2.COLOR_BGR2GRAY)
   
  
 	 	# Detect ORB features and compute descriptors.
- 		orb = cv2.ORB_create(MAX_FEATURES)
- 		keypoints1, descriptors1 = orb.detectAndCompute(im1Gray, None)
- 		keypoints2, descriptors2 = orb.detectAndCompute(im2Gray, None)
+		orb = cv2.ORB_create(MAX_FEATURES)
+		keypoints1, descriptors1 = orb.detectAndCompute(im1Gray, None)
+		keypoints2, descriptors2 = orb.detectAndCompute(im2Gray, None)
  
 		# Match features.
 		matcher = cv2.DescriptorMatcher_create(cv2.DESCRIPTOR_MATCHER_BRUTEFORCE_HAMMING)
@@ -365,8 +390,8 @@ class shot:
 	def registration(self,cam=0):
 		#assert self.unreliable_registration == False # Ensure that the registration that we obtained with the feature extraction method is reliable
 		def normalize_helper(image):
-                        im_min, im_max = np.amin(image), np.amax(image)
-                        new_difference = 255
+			im_min, im_max = np.amin(image), np.amax(image)
+			new_difference = 255
 			imnew = (image - im_min)*(new_difference/(im_max - im_min))
 			return imnew
 		
@@ -403,7 +428,7 @@ class shot:
 			regis_3 = self.__alignImages(im3,im1)
 			regis_4 = self.__alignImages(im4,im1)
 
-		regis = np.asarray([regis_1,regis_2,regis_3,regis_4] )
+		regis = np.asarray([regis_1,regis_2,regis_3,regis_4],)
 		
 		if cam>0 :
 			return regis[cam-1]
